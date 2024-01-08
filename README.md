@@ -1,6 +1,14 @@
 # PTP1
 Patch the Planet: Restore Missing Data | Team 2
 
+## Participants
+- Daniel Borkowski
+- Jakub Chojnacki
+- Mikołaj Czachorowski
+- Julia Farganus
+- Agata Groszek
+- Kasia Matuszek
+
 ## Challenge
 https://thinkonward.com/app/c/challenges/patch-the-planet
 
