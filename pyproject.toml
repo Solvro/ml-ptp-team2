@@ -69,3 +69,6 @@ order-by-type = true
 lines-between-types = 1
 combine-as-imports = true
 # known_first_party = "common"
+
+[tool.setuptools.dynamic]
+readme = {file = ['README.md']}
