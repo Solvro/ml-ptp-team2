@@ -180,3 +180,6 @@ poetry.toml
 pyrightconfig.json
 
 # End of https://www.toptal.com/developers/gitignore/api/python
+
+
+notebooks/temp_extracted_npz_files/generated_part1_npz/seismicCubes_RFC_fullstack_2023.*.npz
