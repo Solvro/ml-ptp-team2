@@ -9,8 +9,8 @@ def copy_gz(filename, src_dir, dest_dir):
             shutil.copyfileobj(f_in, f_out)
 
 
-src_dir = Path('./data/real_nii_gz')
-dest_dir = Path('./data/real_nii')
+src_dir = Path('./data/generated_part1_missing_nii_gz')
+dest_dir = Path('./data/generated_part1_missing_nii')
 
 os.makedirs(dest_dir, exist_ok=True)
 
