@@ -17,7 +17,7 @@ dependencies = [
     "numpy ~= 1.24",
 ]
 [project.urls]
-"Source" = "https://github.com/SOLVRO-ML/PTP1"
+"Source" = "https://github.com/SOLVRO-ML/PTP2"
 
 
 [project.optional-dependencies]
@@ -38,7 +38,7 @@ test = [
 ]
 dev = ["ptp[jupyter, lint, test]"]
 
-[tool.setuptools.packages.find]
+    [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.ruff]
