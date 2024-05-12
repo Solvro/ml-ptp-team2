@@ -1,6 +1,6 @@
-from matplotlib import pyplot as plt
 import numpy as np
-import pandas as pd 
+import pandas as pd
+from matplotlib import pyplot as plt
 
 DIMS = ['x', 'y', 'z']
 
@@ -45,7 +45,7 @@ def plot_mean_and_std(df, ax, title=''):
     ax2.set_ylabel('std')
     ax.set_title(title)
 
-    return ax, ax2 
+    return ax, ax2
 
 def plot_dist_along_each_dimension(volumin, title):
     plt.figure(figsize=(12, 4), constrained_layout=True)

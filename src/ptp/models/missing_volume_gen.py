@@ -1,22 +1,9 @@
-import numpy as np # linear algebra
-import pandas as pd # data processing, CSV file I/O (e.g. pd.read_csv)
-import pytorch_lightning as pl
-import os
-import matplotlib.pyplot as plt
-from skimage.metrics import structural_similarity
-from pathlib import Path
-import torch
-import nibabel as nib
-import torch.nn.functional as F
-import torch.nn as nn
 from typing import Literal
-from monai.networks.nets import UNet
+
+import numpy as np  # linear algebra
+import torch
 # Structural Similarity Loss
-from monai.losses import SSIMLoss
-from monai.networks.layers import Norm
-from monai.data import CacheDataset, Dataset, DataLoader, list_data_collate, NibabelReader
 from monai.data import MetaTensor
-from monai.transforms import MapTransform
 
 
 def training_data_generator_pt(seismic, axis: Literal['i_line', 'x_line', None]=None, percentile: int=25):
