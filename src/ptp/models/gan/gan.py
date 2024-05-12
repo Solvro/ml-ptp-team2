@@ -54,6 +54,7 @@ class GAN(pl.LightningModule):
         X, targets, mask = batch["image"].as_tensor(), batch["target"].as_tensor(), batch['mask']
         batch_size = X.shape[0]
 
+        # TODO: add some noise to the labels
         real_label = torch.ones((batch_size, 1), device=self.device)
         fake_label = torch.zeros((batch_size, 1), device=self.device)
 
@@ -73,7 +74,7 @@ class GAN(pl.LightningModule):
         errD_fake = F.binary_cross_entropy(d_z, fake_label)
 
         # Compute the mean or not? - maybe compute the loss at the same time
-        errD = errD_real + errD_fake
+        errD = (errD_real + errD_fake) / 2
 
         # We optimize only discriminator's parameters
         d_opt.zero_grad()

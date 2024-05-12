@@ -58,9 +58,11 @@ class Generator(pl.LightningModule):
         x = self.down2(x)
         x_h = x.clone()
 
+        # Higher dimensional features
         x_h = self.inv_res_h_1(x_h)
         x_h = self.resnet_h_1(x_h)
 
+        # Lower dimensional features
         x_l = self.down3(x)
         x_l = self.resnet_l_1(x_l)
         x_l = self.upsampling(x_l)

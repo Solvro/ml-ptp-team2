@@ -2,6 +2,8 @@ import pytorch_lightning as pl
 import torch
 from torch import nn
 
+from src.ptp.models.utils import num_trainable_params
+
 
 # TODO: spectral normalization?
 class Discriminator(pl.LightningModule):
@@ -21,15 +23,15 @@ class Discriminator(pl.LightningModule):
             nn.BatchNorm3d(64, momentum=0.9),
             nn.LeakyReLU(0.2),
             nn.Dropout(0.3),
-            nn.Conv3d(64, 128, kernel_size=3, stride=2, padding=1, bias=False),  # 128, 16, 16, 16
+            nn.Conv3d(64, 64, kernel_size=3, stride=2, padding=1, bias=False),  # 128, 16, 16, 16
+            nn.BatchNorm3d(64, momentum=0.9),
+            nn.LeakyReLU(0.2),
+            nn.Dropout(0.3),
+            nn.Conv3d(64, 128, kernel_size=3, stride=2, padding=1, bias=False),  # 128, 8, 8, 8
             nn.BatchNorm3d(128, momentum=0.9),
             nn.LeakyReLU(0.2),
             nn.Dropout(0.3),
-            nn.Conv3d(128, 256, kernel_size=3, stride=2, padding=1, bias=False),  # 256, 8, 8, 8
-            nn.BatchNorm3d(256, momentum=0.9),
-            nn.LeakyReLU(0.2),
-            nn.Dropout(0.3),
-            nn.Conv3d(256, 1, kernel_size=4, bias=False),  #
+            nn.Conv3d(128, 1, kernel_size=4, bias=False),  #
         ])
 
     def forward(self, x):
@@ -39,3 +41,10 @@ class Discriminator(pl.LightningModule):
         x = x.view(batch_size, -1)
         x = torch.sigmoid(x)
         return x
+
+
+if __name__ == '__main__':
+    discriminator = Discriminator(1)
+    input_pt = torch.rand((10, 1, 256, 256, 256))
+    print(discriminator(input_pt).shape)
+    print(num_trainable_params(discriminator))
