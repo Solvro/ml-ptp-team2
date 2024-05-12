@@ -1,11 +1,11 @@
 import numpy as np # linear algebra
 import pandas as pd # data processing, CSV file I/O (e.g. pd.read_csv)
-import pytorch_lightning as pl 
-import os 
+import pytorch_lightning as pl
+import os
 import matplotlib.pyplot as plt
 from skimage.metrics import structural_similarity
 from pathlib import Path
-import torch 
+import torch
 import nibabel as nib
 import torch.nn.functional as F
 import torch.nn as nn
@@ -28,8 +28,8 @@ def visualize_slices(nib_img, x, y, z, title):
         plt.subplot(1, 3, i + 1)
         plt.imshow(nib_img.get_fdata()[slices[i]], cmap='Greys')
         plt.title(f'Slice along {DIMS[i]}')
-        
-        
+
+
 def visualize_volumes(data_dict, idx, keys, labels, is_color_channel=False):
     nonzero_mask = torch.nonzero(data_dict['mask'].type(torch.bool))
     random_slice = nonzero_mask[np.random.randint(0, nonzero_mask.shape[0])]
@@ -39,7 +39,7 @@ def visualize_volumes(data_dict, idx, keys, labels, is_color_channel=False):
     else:
         _, x, y, z = random_slice
         slices = [np.s_[0, x, :, :], np.s_[0, :, y, :], np.s_[0, :, :, z]]
-    
+
     for i, (key, label) in enumerate(zip(keys, labels)):
         plt.figure(figsize=(12, 4), constrained_layout=True)
         plt.suptitle(f'{label} {idx}')
@@ -47,7 +47,7 @@ def visualize_volumes(data_dict, idx, keys, labels, is_color_channel=False):
             plt.subplot(1, 3, j + 1)
             plt.title(f'Slice along {DIMS[j]}')
             plt.imshow(data_dict[key].detach()[slices[j]], cmap='Greys')
-            
+
 
 def rescale_volume(seismic):
     minval = np.percentile(seismic, 2)
@@ -71,7 +71,7 @@ def training_data_generator(seismic, axis: Literal['i_line', 'x_line', None]=Non
     Returns:
         seismic: np.ndarray, original survey 3D matrix with deleted region
         target: np.ndarray, 3D deleted region
-        target_mask: np.ndarray, position of target 3D matrix in seismic 3D matrix. 
+        target_mask: np.ndarray, position of target 3D matrix in seismic 3D matrix.
                      This mask is used to reconstruct original survey -> seismic[target_mask]=target.reshape(-1)
     """
 
@@ -112,6 +112,7 @@ def training_data_generator(seismic, axis: Literal['i_line', 'x_line', None]=Non
 
     return seismic, target, target_mask
 
+
 def training_data_generator_pt(seismic, axis: Literal['i_line', 'x_line', None]=None, percentile: int=25):
     # check parameters
     assert isinstance(seismic, MetaTensor) and len(seismic.shape)==4, 'seismic must be 4D MetaTensor'
@@ -146,21 +147,25 @@ def training_data_generator_pt(seismic, axis: Literal['i_line', 'x_line', None]=
 
     return seismic, torch.Tensor(target_mask).type(torch.bool)
 
+
 class RescaleTransform(MapTransform):
     def __call__(self, data):
         for key in self.keys:
             if key in data:
-                # update output data with some_transform_function(data[key]).
                 data[key] = rescale_volume(data[key])
         return data
-    
+
+
 class CorruptedTransform(MapTransform):
-    
+    '''
+    Transform that is applied on the original image and creates
+    its corrupted version
+    '''
     def __init__(self, percentile, **kwargs):
         super().__init__(**kwargs)
         self.percentile = percentile
-    
+
     def __call__(self, data):
         if 'target' in data:
             data['image'], data['mask'] = training_data_generator_pt(data['target'], percentile=self.percentile)
-        return data        
+        return data
