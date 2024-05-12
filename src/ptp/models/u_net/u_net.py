@@ -19,6 +19,7 @@ from torch import nn
 
 from src.ptp.globals import TARGET_DATA_DIR
 from src.ptp.models.transforms import RescaleTransform, CorruptedTransform
+from src.ptp.training.data_preparation import prepare_files_dirs
 
 
 class Net(pl.LightningModule):
@@ -44,14 +45,7 @@ class Net(pl.LightningModule):
         return self._model(x)
 
     def prepare_data(self):
-        targets = sorted(os.listdir(TARGET_DATA_DIR))
-        train_dict = [
-            {'target': TARGET_DATA_DIR / target_name} for target_name in targets[:1]
-        ]
-
-        val_dict = [
-            {'target': TARGET_DATA_DIR / target_name} for target_name in targets[:1]
-        ]
+        train_dict, val_dict = prepare_files_dirs()
 
         # TODO: Examine what these transformations do and whether some other transformations can be applied
         train_transforms = Compose(

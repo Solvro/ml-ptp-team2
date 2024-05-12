@@ -39,3 +39,16 @@ class CorruptedTransform(MapTransform):
         if 'target' in data:
             data['image'], data['mask'] = training_data_generator_pt(data['target'], percentile=self.percentile)
         return data
+
+
+class RandomNoiseTransform(MapTransform):
+
+    def __init__(self, missing_factor=0.7, original_factor=0.3, **kwargs):
+        super().__init__(**kwargs)
+        self.missing_factor = missing_factor
+        self.original_factor = original_factor
+
+    def __call__(self, data):
+        data['image'] = data['image'] + (torch.rand(*data['mask'][0].shape) * data['mask'][0] * self.missing_factor) + (
+                torch.rand(*data['mask'][0].shape) * ~data['mask'][0] * self.original_factor)
+        return data
