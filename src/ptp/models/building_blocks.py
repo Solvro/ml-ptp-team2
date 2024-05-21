@@ -86,8 +86,6 @@ class ResNetBlock3D(nn.Module):
 
 if __name__ == "__main__":
 
-
-
     resnet_block = ResNetBlock3D(1, nn.ReLU)
     resnet_input = torch.randn((1, 1, 10, 10, 10))
     print(resnet_input[0, 0, 0, 0, :])

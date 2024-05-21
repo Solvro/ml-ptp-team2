@@ -18,13 +18,13 @@ from monai.transforms import (
 from torch import nn
 
 from src.ptp.globals import TARGET_DATA_DIR
-from src.ptp.models.transforms import RescaleTransform, CorruptedTransform
+from src.ptp.models.transforms import RescaleTransform, CorruptedTransform, get_transforms
 from src.ptp.training.data_preparation import prepare_files_dirs
 
 
 class Net(pl.LightningModule):
 
-    def __init__(self, percentile=25, loss_func=nn.MSELoss()):
+    def __init__(self, percentile, target_data_dir, loss_func=nn.MSELoss()):
         super().__init__()
 
         # How these shapes form?; try with different input sizes
@@ -40,56 +40,22 @@ class Net(pl.LightningModule):
 
         self.loss_function = loss_func
         self.percentile = percentile
+        self.target_data_dir = target_data_dir
 
     def forward(self, x):
         return self._model(x)
 
     def prepare_data(self):
-        train_dict, val_dict = prepare_files_dirs()
+        train_dict, val_dict = prepare_files_dirs(self.target_data_dir)
 
-        # TODO: Examine what these transformations do and whether some other transformations can be applied
-        train_transforms = Compose(
-            # for now each image would be normalized based on its own mean and std
-            [LoadImaged(keys=['target']),
-             RescaleTransform(keys=['target']),
-             EnsureChannelFirstd(keys=['target']),
-             Orientationd(keys=["target"], axcodes="RAS"),
-             RandSpatialCropd(keys=['target'],
-                              roi_size=(256, 256, 256), random_size=False),
-             CorruptedTransform(percentile=self.percentile, keys=['target']),
-             # Problem: missing areas are nans, which causes everything else to be nan
-             SignalFillEmptyd(keys=['image'], replacement=256),
-             ScaleIntensityd(keys=["image", "target"]),
-             ]
-        )
-
-        val_transforms = Compose(
-            # for now each image would be normalized based on its own mean and std
-            [LoadImaged(keys=['target']),
-             RescaleTransform(keys=['target']),
-             EnsureChannelFirstd(keys=['target']),
-             Orientationd(keys=["target"], axcodes="RAS"),
-             SpatialCropd(keys=['target'], roi_center=(150, 150, 750),
-                          roi_size=(256, 256, 256)),
-             CorruptedTransform(percentile=self.percentile, keys=['target']),
-             # Problem: missing areas are nans, which causes everything else to be nan
-             SignalFillEmptyd(keys=['image'], replacement=256),
-             # Scale to range [0,1]
-             ScaleIntensityd(keys=["image", "target"]),
-             ]
-        )
-
-        # Cached Dataset: na RAM wrzuca; to co jest wynikiem transformow wrzuca na RAM
-        # ale to wtedy nie robi tego transform
-        # Smart Cached Dataset: madre?
+        transforms = get_transforms(self.percentile)
         self.train_data = Dataset(
             data=train_dict,
-            transform=train_transforms
+            transform=Compose(transforms)
         )
-
         self.val_data = Dataset(
             data=val_dict,
-            transform=val_transforms
+            transform=Compose(transforms)
         )
 
     def train_dataloader(self):
