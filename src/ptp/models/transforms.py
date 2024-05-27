@@ -60,16 +60,3 @@ class RandomNoiseTransform(MapTransform):
         data['image'] = data['image'] + (torch.rand(*data['mask'][0].shape) * data['mask'][0] * self.missing_factor) + (
                 torch.rand(*data['mask'][0].shape) * ~data['mask'][0] * self.original_factor)
         return data
-
-
-def get_transforms(percentile):
-    return [LoadImaged(keys=['target']),
-                 RescaleTransform(keys=['target']),
-                 EnsureChannelFirstd(keys=['target']),
-                 Orientationd(keys=["target"], axcodes="RAS"),
-                 SpatialCropd(keys=['target'], roi_center=(150, 150, 750), roi_size=(256, 256, 256)),
-                 CorruptedTransform(percentile=percentile, keys=['target']),
-                 # Problem: missing areas are nans, which causes everything else to be nan
-                 SignalFillEmptyd(keys=['image'], replacement=256),
-                 # Scale to range [0,1]
-                 ScaleIntensityd(keys=["image", "target"])]

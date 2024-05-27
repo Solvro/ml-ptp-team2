@@ -69,6 +69,8 @@ class Generator(pl.LightningModule):
 
         x = torch.cat((x_l, x_h), axis=1)
         x = self.up2(x)
+        # Generator's output must be in the appropriate range!
+        x = torch.sigmoid(x)
         return x
 
 
@@ -76,5 +78,6 @@ if __name__ == '__main__':
     gen = Generator()
     t1 = torch.randn((1, 1, 256, 256, 256))
     output = gen(t1)
+    print(output[0, 0, 0, :5, :])
     print(output.shape)
     print(num_trainable_params(gen))

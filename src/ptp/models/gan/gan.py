@@ -36,15 +36,22 @@ class GAN(pl.LightningModule):
         self.D = Discriminator(1)
 
         self.percentile = percentile
+        self.transforms = [LoadImaged(keys=['target']),
+             NormalizeIntensity(keys=['target']),
+             EnsureChannelFirstd(keys=['target']),
+             Orientationd(keys=["target"], axcodes="RAS"),
+             RandSpatialCropd(keys=['target'],
+                              roi_size=(256, 256, 256), random_size=False),
+             CorruptedTransform(percentile=self.percentile, keys=['target']),
+             # Problem: missing areas are nans, which causes everything else to be nan
+             SignalFillEmptyd(keys=['image'], replacement=0.0),
+             ScaleIntensityd(keys=["image", "target"]),
+             RandomNoiseTransform(keys=['image', 'mask'])
+             ]
+
 
         # Activate manual optimization
         self.automatic_optimization = False
-
-        self.discriminator_real_loss = []
-        self.discriminator_fake_loss = []
-
-        self.generator_real_loss = []
-        self.generator_mse_loss = []
 
     def forward(self, x):
         return self.G(x)
