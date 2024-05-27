@@ -3,17 +3,9 @@ import torch
 # Structural Similarity Loss
 from monai.data import MetaTensor
 from monai.transforms import MapTransform
+
 from src.ptp.models.missing_volume_gen import training_data_generator_pt
-from monai.transforms import (
-    Compose,
-    LoadImaged,
-    EnsureChannelFirstd,
-    Orientationd,
-    SpatialCropd,
-    SignalFillEmptyd,
-    RandSpatialCropd,
-    ScaleIntensityd
-)
+
 
 def rescale_volume(seismic):
     minval = np.percentile(seismic, 2)

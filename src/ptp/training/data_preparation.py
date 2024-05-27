@@ -1,7 +1,5 @@
 import os
 
-from src.ptp.globals import TARGET_DATA_DIR
-
 
 def prepare_files_dirs(target_data_dir, one_sample_mode=False):
     targets = sorted(os.listdir(target_data_dir))

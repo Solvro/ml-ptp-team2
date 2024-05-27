@@ -1,5 +1,3 @@
-import os
-
 import pytorch_lightning as pl
 import torch
 from monai.data import Dataset, DataLoader, list_data_collate
@@ -12,12 +10,10 @@ from monai.transforms import (
     Orientationd,
     SpatialCropd,
     SignalFillEmptyd,
-    RandSpatialCropd,
     ScaleIntensityd
 )
 from torch import nn
 
-from src.ptp.globals import TARGET_DATA_DIR
 from src.ptp.models.transforms import RescaleTransform, CorruptedTransform
 from src.ptp.training.data_preparation import prepare_files_dirs
 

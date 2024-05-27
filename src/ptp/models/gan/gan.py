@@ -1,57 +1,49 @@
-import os
-
-import torch
 import pytorch_lightning as pl
+import torch
 import torch.nn.functional as F
-
-from src.ptp.globals import TARGET_DATA_DIR
-from src.ptp.models.gan.discriminator import Discriminator
-from src.ptp.models.gan.generator import Generator
-from monai.data import CacheDataset, Dataset, DataLoader, list_data_collate, NibabelReader
+from monai.data import Dataset, DataLoader, list_data_collate
 from monai.transforms import (
-    NormalizeIntensity,
     Compose,
     LoadImaged,
     EnsureChannelFirstd,
     Orientationd,
-    SpatialCropd,
-    MapTransform,
     SignalFillEmptyd,
     RandSpatialCropd,
-    ScaleIntensityd,
-    ScaleIntensityRanged, MaskIntensity
+    ScaleIntensityd
 )
-from monai.data import MetaTensor
-from monai.apps.reconstruction.transforms.dictionary import ReferenceBasedNormalizeIntensityd
 
-from src.ptp.models.transforms import RescaleTransform, CorruptedTransform, RandomNoiseTransform
+from src.ptp.models.gan.discriminator import Discriminator
+from src.ptp.models.gan.generator import Generator
+from src.ptp.models.transforms import CorruptedTransform, RandomNoiseTransform
 from src.ptp.training.data_preparation import prepare_files_dirs
 
 
 class GAN(pl.LightningModule):
 
-    def __init__(self, percentile=20):
+    def __init__(self, percentile, target_data_dir, n_critic):
         super().__init__()
         self.G = Generator()
         self.D = Discriminator(1)
+        self.n_critic = n_critic
+        self.target_data_dir = target_data_dir
 
         self.percentile = percentile
         self.transforms = [LoadImaged(keys=['target']),
-             NormalizeIntensity(keys=['target']),
-             EnsureChannelFirstd(keys=['target']),
-             Orientationd(keys=["target"], axcodes="RAS"),
-             RandSpatialCropd(keys=['target'],
-                              roi_size=(256, 256, 256), random_size=False),
-             CorruptedTransform(percentile=self.percentile, keys=['target']),
-             # Problem: missing areas are nans, which causes everything else to be nan
-             SignalFillEmptyd(keys=['image'], replacement=0.0),
-             ScaleIntensityd(keys=["image", "target"]),
-             RandomNoiseTransform(keys=['image', 'mask'])
-             ]
-
+                           NormalizeIntensityd(keys=['target']),
+                           EnsureChannelFirstd(keys=['target']),
+                           Orientationd(keys=["target"], axcodes="RAS"),
+                           RandSpatialCropd(keys=['target'],
+                                            roi_size=(256, 256, 256), random_size=False),
+                           CorruptedTransform(percentile=self.percentile, keys=['target']),
+                           # Problem: missing areas are nans, which causes everything else to be nan
+                           SignalFillEmptyd(keys=['image'], replacement=0.0),
+                           ScaleIntensityd(keys=["image", "target"]),
+                           RandomNoiseTransform(keys=['image', 'mask'])
+                           ]
 
         # Activate manual optimization
         self.automatic_optimization = False
+        self.compt_step = 0
 
     def forward(self, x):
         return self.G(x)
@@ -91,25 +83,26 @@ class GAN(pl.LightningModule):
         #############
         # Generator #
         #############
-        d_z = self.D(g_X)
+        if self.compt_step % self.n_critic == 0:
+            g_X = self.G(X)
+            d_z = self.D(g_X)
 
-        # discriminator should predict those as real
-        errG_pred = F.binary_cross_entropy(d_z, real_label)
-        # reconstruction loss
-        errG_mse = F.mse_loss(g_X, targets)
+            # discriminator should predict those as real
+            errG_pred = F.binary_cross_entropy(d_z, real_label)
+            # reconstruction loss
+            # errG_mse = F.mse_loss(g_X, targets)
 
-        errG = (errG_pred + errG_mse) / 2
+            # errG = (errG_pred + errG_mse) / 2
+            errG = errG_pred
 
-        g_opt.zero_grad()
-        self.manual_backward(errG)
-        g_opt.step()
+            g_opt.zero_grad()
+            self.manual_backward(errG)
+            g_opt.step()
 
-        self.log_dict({'g_loss': errG, 'd_loss': errD, 'train_loss': (errG + errD)}, prog_bar=True, on_epoch=True)
-        self.discriminator_real_loss.append(errD_real)
-        self.discriminator_fake_loss.append(errD_fake)
-        self.generator_real_loss.append(errG_pred)
-        self.generator_mse_loss.append(errG_mse)
+            self.log_dict({'g_loss': errG}, prog_bar=True, on_epoch=True)
 
+        self.log_dict({'d_loss': errD, 'n_step': self.compt_step}, prog_bar=True, on_epoch=True)
+        self.compt_step += 1
 
     def validation_step(self, batch, batch_idx):
         X, targets = batch["image"].as_tensor(), batch["target"].as_tensor()
@@ -140,51 +133,27 @@ class GAN(pl.LightningModule):
         d_z = self.D(g_X)
         # discriminator should predict those as real
         errG_pred = F.binary_cross_entropy(d_z, real_label)
-        errG_mse = F.mse_loss(g_X, targets)
+        # errG_mse = F.mse_loss(g_X, targets)
 
-        errG = errG_pred + errG_mse
+        errG = errG_pred  # + errG_mse
 
-        self.log_dict({'g_loss': errG, 'd_loss': errD, 'val_loss': (errG + errD)}, prog_bar=True, on_epoch=True)
+        self.log_dict({'val_g_loss': errG, 'val_d_loss': errD, 'val_loss': (errG + errD)}, prog_bar=True, on_epoch=True)
 
     def configure_optimizers(self):
         # Discriminator and generator need to be trained separately so they have different optimizers
-        d_opt = torch.optim.Adam(self.D.parameters(), lr=0.0002, betas=(0.5, 0.999))
+        d_opt = torch.optim.RMSprop(self.D.parameters(), lr=0.0002)
         g_opt = torch.optim.Adam(self.G.parameters(), lr=0.0002, betas=(0.5, 0.999))
         return g_opt, d_opt
 
     def prepare_data(self):
-        train_dict, val_dict = prepare_files_dirs()
+        train_dict, val_dict = prepare_files_dirs(self.target_data_dir, one_sample_mode=True)
 
         train_transforms = Compose(
-            # for now each image would be normalized based on its own mean and std
-            [LoadImaged(keys=['target']),
-             RescaleTransform(keys=['target']),
-             EnsureChannelFirstd(keys=['target']),
-             Orientationd(keys=["target"], axcodes="RAS"),
-             RandSpatialCropd(keys=['target'],
-                              roi_size=(256, 256, 256), random_size=False),
-             CorruptedTransform(percentile=self.percentile, keys=['target']),
-             # Problem: missing areas are nans, which causes everything else to be nan
-             SignalFillEmptyd(keys=['image'], replacement=0.0),
-             ScaleIntensityd(keys=["image", "target"]),
-             RandomNoiseTransform(keys=['image', 'mask'])
-             ]
+            self.transforms
         )
 
         val_transforms = Compose(
-            # for now each image would be normalized based on its own mean and std
-            [LoadImaged(keys=['target']),
-             RescaleTransform(keys=['target']),
-             EnsureChannelFirstd(keys=['target']),
-             Orientationd(keys=["target"], axcodes="RAS"),
-             SpatialCropd(keys=['target'], roi_center=(150, 150, 750),
-                          roi_size=(256, 256, 256)),
-             CorruptedTransform(percentile=self.percentile, keys=['target']),
-             # Problem: missing areas are nans, which causes everything else to be nan
-             SignalFillEmptyd(keys=['image'], replacement=0.0),
-             ScaleIntensityd(keys=["image", "target"]),
-             RandomNoiseTransform(keys=['image', 'mask']),
-             ]
+            self.transforms
         )
 
         self.train_data = Dataset(

@@ -1,10 +1,8 @@
+import pytorch_lightning as pl
 import torch
 from torch import nn
 
 from src.ptp.models.building_blocks import InvertedResidual, ResNetBlock3D
-import pytorch_lightning as pl
-import torch.nn.functional as F
-
 from src.ptp.models.utils import num_trainable_params
 
 
@@ -33,9 +31,9 @@ class Generator(pl.LightningModule):
             nn.LeakyReLU(0.2)
         )
 
-        self.resnet_l_1 = ResNetBlock3D(32, act_fn=nn.ReLU) # 32, 32, 32, 32
+        self.resnet_l_1 = ResNetBlock3D(32, act_fn=nn.ReLU)  # 32, 32, 32, 32
 
-        self.resnet_h_1 = ResNetBlock3D(64, act_fn=nn.ReLU) # 64, 64, 64, 64
+        self.resnet_h_1 = ResNetBlock3D(64, act_fn=nn.ReLU)  # 64, 64, 64, 64
 
         self.upsampling = nn.Sequential(
             nn.ConvTranspose3d(32, 64, kernel_size=3, stride=2, padding=1, output_padding=1),
@@ -52,6 +50,8 @@ class Generator(pl.LightningModule):
             nn.BatchNorm3d(1, momentum=0.9),
             nn.LeakyReLU(0.2)
         )  # 1, ??
+
+        self.norm = nn.Tanh()
 
     def forward(self, x):
         x = self.down1(x)
@@ -70,7 +70,7 @@ class Generator(pl.LightningModule):
         x = torch.cat((x_l, x_h), axis=1)
         x = self.up2(x)
         # Generator's output must be in the appropriate range!
-        x = torch.sigmoid(x)
+        x = self.norm(x)
         return x
 
 
