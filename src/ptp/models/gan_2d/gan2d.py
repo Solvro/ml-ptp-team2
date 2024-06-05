@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytorch_lightning as pl
 import torch
 import torch.nn.functional as F
@@ -9,16 +11,17 @@ from monai.transforms import (
     Orientationd,
     SignalFillEmptyd,
     RandSpatialCropd,
-    ScaleIntensityd
+    ScaleIntensityd, NormalizeIntensityd
 )
 
-from src.ptp.models.gan.discriminator import Discriminator
-from src.ptp.models.gan.generator import Generator
-from src.ptp.models.transforms import CorruptedTransform, RandomNoiseTransform
+from src.ptp.evaluation.visualization import visualize_volumes, visualize_slices
+from src.ptp.models.gan_2d.discriminator import Discriminator
+from src.ptp.models.gan_2d.generator import Generator
+from src.ptp.models.transforms import CorruptedTransform, RandomNoiseTransform, SliceTransform
 from src.ptp.training.data_preparation import prepare_files_dirs
 
 
-class GAN(pl.LightningModule):
+class GAN2D(pl.LightningModule):
 
     def __init__(self, percentile, target_data_dir, n_critic):
         super().__init__()
@@ -28,6 +31,7 @@ class GAN(pl.LightningModule):
         self.target_data_dir = target_data_dir
 
         self.percentile = percentile
+        # Adjust to 2d transformations
         self.transforms = [LoadImaged(keys=['target']),
                            NormalizeIntensityd(keys=['target']),
                            EnsureChannelFirstd(keys=['target']),
@@ -38,7 +42,8 @@ class GAN(pl.LightningModule):
                            # Problem: missing areas are nans, which causes everything else to be nan
                            SignalFillEmptyd(keys=['image'], replacement=0.0),
                            ScaleIntensityd(keys=["image", "target"]),
-                           RandomNoiseTransform(keys=['image', 'mask'])
+                           RandomNoiseTransform(keys=['image', 'mask']),
+                           SliceTransform(keys=['image', 'mask', 'target'])
                            ]
 
         # Activate manual optimization
@@ -137,7 +142,8 @@ class GAN(pl.LightningModule):
 
         errG = errG_pred  # + errG_mse
 
-        self.log_dict({'val_g_loss': errG, 'val_d_loss': errD, 'val_loss': (errG + errD)}, prog_bar=True, on_epoch=True)
+        self.log_dict({'val_g_loss': errG, 'val_d_loss': errD, 'val_loss': (errG + errD)},
+                      prog_bar=True, on_epoch=True)
 
     def configure_optimizers(self):
         # Discriminator and generator need to be trained separately so they have different optimizers
@@ -169,7 +175,7 @@ class GAN(pl.LightningModule):
     def train_dataloader(self):
         train_loader = DataLoader(
             self.train_data,
-            batch_size=1,
+            batch_size=2,
             shuffle=True,
             num_workers=4,
             collate_fn=list_data_collate
@@ -179,3 +185,20 @@ class GAN(pl.LightningModule):
     def val_dataloader(self):
         val_loader = DataLoader(self.val_data, batch_size=1, num_workers=4)
         return val_loader
+
+
+if __name__ == '__main__':
+    data_dir = Path("C://Users//julia//PycharmProjects//SOLVRO-PTP2//data//generated_part1_nii_gz")
+    gan2d = GAN2D(20, data_dir, 4)
+
+    gan2d.prepare_data()
+    train_loader = gan2d.train_dataloader()
+
+    keys = ['target', 'image', 'prediction']
+    labels = ['Original', 'Corrupted', 'Prediction']
+
+    for i, batch in enumerate(train_loader):
+        print(batch['image'].shape)
+        prediction = gan2d(batch['image'])
+        batch['prediction'] = prediction
+        visualize_slices(batch, i, keys, labels, True)

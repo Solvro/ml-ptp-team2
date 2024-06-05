@@ -2,21 +2,21 @@ import torch
 from torch import nn
 
 
-class ConvBNReLU(nn.Sequential):
+class ConvBNReLU3d(nn.Sequential):
     def __init__(self, in_planes, out_planes, kernel_size=3, stride=1, groups=1, norm_layer=None):
         padding = (kernel_size - 1) // 2
         if norm_layer is None:
             norm_layer = nn.BatchNorm3d
-        super(ConvBNReLU, self).__init__(
+        super(ConvBNReLU3d, self).__init__(
             nn.Conv3d(in_planes, out_planes, kernel_size, stride, padding, groups=groups, bias=False),
             norm_layer(out_planes),
             nn.ReLU6(inplace=True)
         )
 
 
-class InvertedResidual(nn.Module):
+class InvertedResidual3d(nn.Module):
     def __init__(self, inp, oup, stride, expand_ratio, norm_layer=None):
-        super(InvertedResidual, self).__init__()
+        super(InvertedResidual3d, self).__init__()
         self.stride = stride
         assert stride in [1, 2]
 
@@ -29,10 +29,10 @@ class InvertedResidual(nn.Module):
         layers = []
         if expand_ratio != 1:
             # pw
-            layers.append(ConvBNReLU(inp, hidden_dim, kernel_size=1, norm_layer=norm_layer))
+            layers.append(ConvBNReLU3d(inp, hidden_dim, kernel_size=1, norm_layer=norm_layer))
         layers.extend([
             # dw
-            ConvBNReLU(hidden_dim, hidden_dim, stride=stride, groups=hidden_dim, norm_layer=norm_layer),
+            ConvBNReLU3d(hidden_dim, hidden_dim, stride=stride, groups=hidden_dim, norm_layer=norm_layer),
             # pw-linear
             nn.Conv3d(hidden_dim, oup, 1, 1, 0, bias=False),
             norm_layer(oup),
@@ -46,7 +46,7 @@ class InvertedResidual(nn.Module):
             return self.conv(x)
 
 
-class ResNetBlock3D(nn.Module):
+class ResNetBlock3d(nn.Module):
     def __init__(self, c_in, act_fn, subsample=False, c_out=-1):
         """ResNetBlock.
 
@@ -82,15 +82,3 @@ class ResNetBlock3D(nn.Module):
         out = z + x
         out = self.act_fn(out)
         return out
-
-
-if __name__ == "__main__":
-
-    resnet_block = ResNetBlock3D(1, nn.ReLU)
-    resnet_input = torch.randn((1, 1, 10, 10, 10))
-    print(resnet_input[0, 0, 0, 0, :])
-    print(torch.mean(resnet_input))
-    resnet_result = resnet_block(resnet_input)
-    print(resnet_result.shape)
-    print(resnet_result[0, 0, 0, 0, :])
-    print(torch.mean(resnet_result))

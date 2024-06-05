@@ -52,3 +52,18 @@ class RandomNoiseTransform(MapTransform):
         data['image'] = data['image'] + (torch.rand(*data['mask'][0].shape) * data['mask'][0] * self.missing_factor) + (
                 torch.rand(*data['mask'][0].shape) * ~data['mask'][0] * self.original_factor)
         return data
+
+
+class SliceTransform(MapTransform):
+
+    def __init__(self, low=0, high=256, **kwargs):
+        super().__init__(**kwargs)
+        self.low = low
+        self.high = high
+
+    def __call__(self, data):
+        z = np.random.randint(self.low, self.high)
+        data['image'] = data['image'][:, :, :, z]
+        data['mask'] = data['mask'][:, :, :, z]
+        data['target'] = data['target'][:, :, :, z]
+        return data

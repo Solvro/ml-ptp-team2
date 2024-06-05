@@ -2,7 +2,7 @@ import pytorch_lightning as pl
 import torch
 from torch import nn
 
-from src.ptp.models.building_blocks import InvertedResidual, ResNetBlock3D
+from src.ptp.models.gan_3d.building_blocks import InvertedResidual3d, ResNetBlock3d
 from src.ptp.models.utils import num_trainable_params
 
 
@@ -22,7 +22,7 @@ class Generator(pl.LightningModule):
             nn.LeakyReLU(0.2)
         )
 
-        self.inv_res_h_1 = InvertedResidual(64, oup=64, stride=1, expand_ratio=0.5)  # 64, 64, 64, 64
+        self.inv_res_h_1 = InvertedResidual3d(64, oup=64, stride=1, expand_ratio=0.5)  # 64, 64, 64, 64
 
         # part to create lower resolution features
         self.down3 = nn.Sequential(
@@ -31,9 +31,9 @@ class Generator(pl.LightningModule):
             nn.LeakyReLU(0.2)
         )
 
-        self.resnet_l_1 = ResNetBlock3D(32, act_fn=nn.ReLU)  # 32, 32, 32, 32
+        self.resnet_l_1 = ResNetBlock3d(32, act_fn=nn.ReLU)  # 32, 32, 32, 32
 
-        self.resnet_h_1 = ResNetBlock3D(64, act_fn=nn.ReLU)  # 64, 64, 64, 64
+        self.resnet_h_1 = ResNetBlock3d(64, act_fn=nn.ReLU)  # 64, 64, 64, 64
 
         self.upsampling = nn.Sequential(
             nn.ConvTranspose3d(32, 64, kernel_size=3, stride=2, padding=1, output_padding=1),

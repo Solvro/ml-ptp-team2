@@ -55,11 +55,9 @@ class Net(pl.LightningModule):
         return self._model(x)
 
     def prepare_data(self):
-        train_dict, val_dict = prepare_files_dirs(self.target_data_dir, one_sample_mode=self.one_sample_mode)
-        # TODO: Examine what these transformations do and whether some other transformations can be applied
-        # Cached Dataset: na RAM wrzuca; to co jest wynikiem transformow wrzuca na RAM
-        # ale to wtedy nie robi tego transform
-        # Smart Cached Dataset: madre?
+        train_dict, val_dict = prepare_files_dirs(self.target_data_dir,
+                                                  one_sample_mode=self.one_sample_mode)
+
         self.train_data = Dataset(
             data=train_dict,
             transform=Compose(self.transforms)
@@ -69,18 +67,18 @@ class Net(pl.LightningModule):
             transform=Compose(self.transforms)
         )
 
-    def train_dataloader(self):
+    def train_dataloader(self, batch_size=5):
         train_loader = DataLoader(
             self.train_data,
-            batch_size=1 if self.one_sample_mode else 5,
+            batch_size=1 if self.one_sample_mode else batch_size,
             shuffle=True,
             num_workers=4,
             collate_fn=list_data_collate
         )
         return train_loader
 
-    def val_dataloader(self):
-        val_loader = DataLoader(self.val_data, batch_size=1 if self.one_sample_mode else 5, num_workers=2)
+    def val_dataloader(self, batch_size=5):
+        val_loader = DataLoader(self.val_data, batch_size=1 if self.one_sample_mode else batch_size, num_workers=2)
         return val_loader
 
     def configure_optimizers(self):
