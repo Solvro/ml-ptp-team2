@@ -34,7 +34,7 @@ class InvertedResidual3d(nn.Module):
             # dw
             ConvBNReLU3d(hidden_dim, hidden_dim, stride=stride, groups=hidden_dim, norm_layer=norm_layer),
             # pw-linear
-            nn.Conv3d(hidden_dim, oup, 1, 1, 0, bias=False),
+            nn.Conv3d(hidden_dim, oup, kernel_size=1, stride=1, padding=0, bias=False), # kernel of 1 means we only change # of channels
             norm_layer(oup),
         ])
         self.conv = nn.Sequential(*layers)

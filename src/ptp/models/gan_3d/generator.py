@@ -16,13 +16,14 @@ class Generator(pl.LightningModule):
             nn.BatchNorm3d(64, momentum=0.9),
             nn.LeakyReLU(0.2)
         )
+
         self.down2 = nn.Sequential(
             nn.Conv3d(64, 64, kernel_size=3, stride=2, padding=1, bias=False),  # 64, 64, 64, 64
             nn.BatchNorm3d(64, momentum=0.9),
             nn.LeakyReLU(0.2)
         )
 
-        self.inv_res_h_1 = InvertedResidual3d(64, oup=64, stride=1, expand_ratio=0.5)  # 64, 64, 64, 64
+        self.inv_res_h_1 = InvertedResidual3d(64, oup=64, stride=1, expand_ratio=2)  # 64, 64, 64, 64
 
         # part to create lower resolution features
         self.down3 = nn.Sequential(
