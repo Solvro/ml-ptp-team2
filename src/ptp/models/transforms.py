@@ -19,6 +19,10 @@ def rescale_volume(seismic):
 
 
 class RescaleTransform(MapTransform):
+    '''
+    Transform that scales the original data based on 2nd and 98th quantile
+    to a range between 0 and 255
+    '''
     def __call__(self, data):
         for key in self.keys:
             if key in data:
@@ -43,14 +47,16 @@ class CorruptedTransform(MapTransform):
 
 class RandomNoiseTransform(MapTransform):
 
-    def __init__(self, missing_factor=0.7, original_factor=0.3, **kwargs):
+    def __init__(self, missing_factor=0.7, original_factor=0.3, lower=0, upper=1, **kwargs):
         super().__init__(**kwargs)
         self.missing_factor = missing_factor
         self.original_factor = original_factor
+        self.lower = lower
+        self.upper = upper
 
     def __call__(self, data):
-        data['image'] = data['image'] + (torch.rand(*data['mask'][0].shape) * data['mask'][0] * self.missing_factor) + (
-                torch.rand(*data['mask'][0].shape) * ~data['mask'][0] * self.original_factor)
+        data['image'] = torch.clip(data['image'] + (torch.rand(*data['mask'][0].shape) * data['mask'][0] * self.missing_factor) + (
+                torch.rand(*data['mask'][0].shape) * ~data['mask'][0] * self.original_factor), min=self.lower, max=self.upper)
         return data
 
 

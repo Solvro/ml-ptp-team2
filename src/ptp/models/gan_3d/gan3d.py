@@ -24,12 +24,14 @@ from src.ptp.training.data_preparation import prepare_files_dirs
 
 class GAN3D(pl.LightningModule):
 
-    def __init__(self, target_data_dir, percentile=0.05, n_critic=4):
+    # recon_loss : reconstruction loss, either mse or tce
+    def __init__(self, target_data_dir, percentile=0.05, n_critic=4, recon_loss=F.mse_loss):
         super().__init__()
         self.G = Generator()
         self.D = Discriminator(1)
         self.n_critic = n_critic
         self.target_data_dir = target_data_dir
+        self.recon_loss = recon_loss
 
         self.percentile = percentile
         self.transforms = [LoadImaged(keys=['target']),
@@ -40,10 +42,9 @@ class GAN3D(pl.LightningModule):
                            RandSpatialCropd(keys=['target'],
                                             roi_size=(256, 256, 256), random_size=False),
                            CorruptedTransform(percentile=self.percentile, keys=['target']),
-                           # Problem: missing areas are nans, which causes everything else to be nan
-                           SignalFillEmptyd(keys=['image'], replacement=127.5),
+                           SignalFillEmptyd(keys=['image'], replacement=127.5), # replace nan values to be the mean
                            ScaleIntensityd(keys=["image", "target"], minv=-1, maxv=1),  # the output image should be between -1 and 1
-                           RandomNoiseTransform(keys=['image', 'mask'])
+                           RandomNoiseTransform(keys=['image', 'mask'], lower=-1, upper=1) # add some random noise
                            ]
 
         # Activate manual optimization
@@ -55,19 +56,19 @@ class GAN3D(pl.LightningModule):
 
     def training_step(self, batch, batch_idx):
         g_opt, d_opt = self.optimizers()
-        X, targets, mask = batch["image"].as_tensor(), batch["target"].as_tensor(), batch['mask']
-        batch_size = X.shape[0]
+        X_corrupted, X_original, mask = batch["image"].as_tensor(), batch["target"].as_tensor(), batch['mask']
+        batch_size = X_corrupted.shape[0]
 
         # TODO: add some noise to the labels
         real_label = torch.ones((batch_size, 1), device=self.device)
         fake_label = torch.zeros((batch_size, 1), device=self.device)
 
-        g_X = self.G(X)
+        g_X = self.G(X_corrupted)
 
         #################
         # Discriminator #
         #################
-        d_x = self.D(targets)
+        d_x = self.D(X_original)
 
         errD_real = F.binary_cross_entropy(d_x, real_label)  # error of predicting real input
 
@@ -88,13 +89,13 @@ class GAN3D(pl.LightningModule):
         # Generator #
         #############
         if self.compt_step % self.n_critic == 0:
-            g_X = self.G(X)
+            g_X = self.G(X_corrupted)
             d_z = self.D(g_X)
 
             # discriminator should predict those as real
             errG_pred = F.binary_cross_entropy(d_z, real_label)
             # reconstruction loss
-            errG_mse = F.mse_loss(g_X, targets) / 4   # loss can be between 0 and 2
+            errG_mse = self.recon_loss(g_X, X_original) / 4   # loss can be between 0 and 4
 
             errG = (errG_pred + errG_mse) / 2
 
@@ -139,7 +140,7 @@ class GAN3D(pl.LightningModule):
         # discriminator should predict those as real
         errG_pred = F.binary_cross_entropy(d_z, real_label)
         # reconstruction loss
-        errG_mse = F.mse_loss(g_X, targets) / 4
+        errG_mse = self.recon_loss(g_X, targets) / 4
 
         errG = (errG_pred + errG_mse) / 2
 
