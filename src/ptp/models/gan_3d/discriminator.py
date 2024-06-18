@@ -31,7 +31,7 @@ class Discriminator(pl.LightningModule):
             nn.BatchNorm3d(128, momentum=0.9),
             nn.LeakyReLU(0.2),
             nn.Dropout(0.3),
-            nn.Conv3d(128, 1, kernel_size=4, bias=False),  #
+            nn.Conv3d(128, 1, kernel_size=4, bias=False),
         ])
 
     def forward(self, x):
@@ -39,7 +39,6 @@ class Discriminator(pl.LightningModule):
         for l in self.layers:
             x = l(x)
         x = x.view(batch_size, -1)
-        x = torch.sigmoid(x)
         return x
 
 

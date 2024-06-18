@@ -3,6 +3,7 @@ from pathlib import Path
 import pytorch_lightning as pl
 import torch
 import torch.nn.functional as F
+import torchvision
 from matplotlib import pyplot as plt
 from monai.data import Dataset, DataLoader, list_data_collate
 from monai.transforms import (
@@ -20,20 +21,23 @@ from src.ptp.models.gan_3d.discriminator import Discriminator
 from src.ptp.models.gan_3d.generator import Generator
 from src.ptp.models.transforms import CorruptedTransform, RandomNoiseTransform, RescaleTransform
 from src.ptp.training.data_preparation import prepare_files_dirs
+from torch.utils.tensorboard import SummaryWriter
 
 
 class GAN3D(pl.LightningModule):
 
     # recon_loss : reconstruction loss, either mse or tce
-    def __init__(self, target_data_dir, percentile=0.05, n_critic=4, recon_loss=F.mse_loss):
+    def __init__(self, target_data_dir, percentile=0.05, n_critic=4, recon_loss=F.mse_loss,
+                 weight_clip=0.01, batch_size=1):
         super().__init__()
         self.G = Generator()
         self.D = Discriminator(1)
         self.n_critic = n_critic
         self.target_data_dir = target_data_dir
         self.recon_loss = recon_loss
-
+        self.weight_clip = weight_clip
         self.percentile = percentile
+        self.batch_size = batch_size
         self.transforms = [LoadImaged(keys=['target']),
                            # NormalizeIntensityd(keys=['target']),
                            RescaleTransform(keys=['target']),
@@ -46,10 +50,11 @@ class GAN3D(pl.LightningModule):
                            ScaleIntensityd(keys=["image", "target"], minv=-1, maxv=1),  # the output image should be between -1 and 1
                            RandomNoiseTransform(keys=['image', 'mask'], lower=-1, upper=1) # add some random noise
                            ]
-
         # Activate manual optimization
         self.automatic_optimization = False
         self.compt_step = 0
+        self.writer = SummaryWriter()
+        self.validation_step_outputs = []
 
     def forward(self, x):
         return self.G(x)
@@ -57,11 +62,6 @@ class GAN3D(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         g_opt, d_opt = self.optimizers()
         X_corrupted, X_original, mask = batch["image"].as_tensor(), batch["target"].as_tensor(), batch['mask']
-        batch_size = X_corrupted.shape[0]
-
-        # TODO: add some noise to the labels
-        real_label = torch.ones((batch_size, 1), device=self.device)
-        fake_label = torch.zeros((batch_size, 1), device=self.device)
 
         g_X = self.G(X_corrupted)
 
@@ -70,20 +70,22 @@ class GAN3D(pl.LightningModule):
         #################
         d_x = self.D(X_original)
 
-        errD_real = F.binary_cross_entropy(d_x, real_label)  # error of predicting real input
+        errD_real = torch.mean(d_x)  # error of predicting real input
 
-        # We need to detach because we don't want to optimize generator at the same time
-        # Tensor.detach() creates new tensor detached from the computational graph
-        d_z = self.D(g_X.clone().detach().to(self.device).requires_grad_(True))
+        d_z = self.D(g_X)
 
-        errD_fake = F.binary_cross_entropy(d_z, fake_label)  # error of predicting generator's output as fake
+        errD_fake = torch.mean(d_z)  # error of predicting generator's output as fake
 
-        errD = (errD_real + errD_fake) / 2
+        errD = errD_fake - errD_real  # same as -(errD_real - errD_fake)
 
         # We optimize only discriminator's parameters
         d_opt.zero_grad()
         self.manual_backward(errD)
         d_opt.step()
+
+        # Parameter Weight Clipping for K-Lipshitz constraint
+        for p in self.D.parameters():
+            p.data.clamp_(-self.weight_clip, self.weight_clip)
 
         #############
         # Generator #
@@ -93,13 +95,11 @@ class GAN3D(pl.LightningModule):
             d_z = self.D(g_X)
 
             # discriminator should predict those as real
-            errG_pred = F.binary_cross_entropy(d_z, real_label)
+            errG_pred = -torch.mean(d_z)
             # reconstruction loss
-            errG_mse = self.recon_loss(g_X, X_original) / 4   # loss can be between 0 and 4
+            errG_recon = self.recon_loss(g_X, X_original)
 
-            errG = (errG_pred + errG_mse) / 2
-
-            # errG = errG_pred
+            errG = errG_pred + errG_recon
 
             g_opt.zero_grad()
             self.manual_backward(errG)
@@ -112,10 +112,6 @@ class GAN3D(pl.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         X, targets = batch["image"].as_tensor(), batch["target"].as_tensor()
-        batch_size = X.shape[0]
-
-        real_label = torch.ones((batch_size, 1), device=self.device)
-        fake_label = torch.zeros((batch_size, 1), device=self.device)
 
         g_X = self.G(X)
 
@@ -123,37 +119,50 @@ class GAN3D(pl.LightningModule):
         # Discriminator #
         #################
         d_x = self.D(targets)
-        errD_real = F.binary_cross_entropy(d_x, real_label)
+        errD_real = torch.mean(d_x)
 
         # We need to detach because we don't want to optimize generator at the same time
         # Tensor.detach() creates new tensor detached from the computational graph
         d_z = self.D(g_X.detach())
-        errD_fake = F.binary_cross_entropy(d_z, fake_label)
+        errD_fake = torch.mean(d_z)
 
-        # Compute the mean or not? - maybe compute the loss at the same time
-        errD = (errD_real + errD_fake) / 2.0
+        errD = errD_fake - errD_real
 
         #############
         # Generator #
         #############
         d_z = self.D(g_X)
         # discriminator should predict those as real
-        errG_pred = F.binary_cross_entropy(d_z, real_label)
+        errG_pred = -torch.mean(d_z)
         # reconstruction loss
-        errG_mse = self.recon_loss(g_X, targets) / 4
+        errG_mse = self.recon_loss(g_X, targets)
 
         errG = (errG_pred + errG_mse) / 2
 
         self.log_dict({'val_g_loss': errG, 'val_d_loss': errD, 'val_loss': (errG + errD)}, prog_bar=True, on_epoch=True)
+        self.validation_step_outputs.append(g_X)
+
+    def on_validation_epoch_end(self) -> None:
+        val_outputs = torch.stack(self.validation_step_outputs)
+        print(val_outputs.shape)
+        grid_x = torchvision.utils.make_grid(val_outputs[:, 0, :, 100, :, :])
+        self.writer.add_image('images - x', grid_x, 0)
+        grid_y = torchvision.utils.make_grid(val_outputs[:, 0, :, :, 100, :])
+        self.writer.add_image('images - y', grid_y, 0)
+        grid_z = torchvision.utils.make_grid(val_outputs[:, 0, :, :, :, 100])
+        self.writer.add_image('images - z', grid_z, 0)
+        self.writer.close()
+        self.validation_step_outputs.clear()
 
     def configure_optimizers(self):
         # Discriminator and generator need to be trained separately so they have different optimizers
-        d_opt = torch.optim.RMSprop(self.D.parameters(), lr=0.0002)
-        g_opt = torch.optim.Adam(self.G.parameters(), lr=0.0002, betas=(0.5, 0.999))
+        d_opt = torch.optim.RMSprop(self.D.parameters(), lr=0.0004)
+        g_opt = torch.optim.RMSprop(self.G.parameters(), lr=0.0001)
         return g_opt, d_opt
 
     def prepare_data(self):
-        train_dict, val_dict = prepare_files_dirs(self.target_data_dir, one_sample_mode=True)
+        one_sample_mode = (self.batch_size == 1)
+        train_dict, val_dict = prepare_files_dirs(self.target_data_dir, one_sample_mode=one_sample_mode)
 
         train_transforms = Compose(
             self.transforms
@@ -176,7 +185,7 @@ class GAN3D(pl.LightningModule):
     def train_dataloader(self):
         train_loader = DataLoader(
             self.train_data,
-            batch_size=1,
+            batch_size=self.batch_size,
             shuffle=True,
             num_workers=4,
             collate_fn=list_data_collate
@@ -184,7 +193,7 @@ class GAN3D(pl.LightningModule):
         return train_loader
 
     def val_dataloader(self):
-        val_loader = DataLoader(self.val_data, batch_size=1, num_workers=4)
+        val_loader = DataLoader(self.val_data, batch_size=self.batch_size, num_workers=4)
         return val_loader
 
 
