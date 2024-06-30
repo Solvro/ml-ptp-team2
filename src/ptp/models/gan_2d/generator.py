@@ -2,8 +2,8 @@ import pytorch_lightning as pl
 import torch
 from torch import nn
 
-from src.ptp.models.gan_2d.building_blocks import InvertedResidual2d, ResNetBlock2d
-from src.ptp.models.utils import num_trainable_params
+from ptp.models.gan_2d.building_blocks import InvertedResidual2d, ResNetBlock2d
+from ptp.models.utils import num_trainable_params
 
 
 class Generator(pl.LightningModule):

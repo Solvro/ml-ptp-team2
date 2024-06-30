@@ -2,7 +2,7 @@ import pytorch_lightning as pl
 import torch
 from torch import nn
 
-from src.ptp.models.utils import num_trainable_params
+from ptp.models.utils import num_trainable_params
 
 
 # TODO: spectral normalization?

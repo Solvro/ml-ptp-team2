@@ -14,8 +14,8 @@ from monai.transforms import (
 )
 from torch import nn
 
-from src.ptp.models.transforms import RescaleTransform, CorruptedTransform
-from src.ptp.training.data_preparation import prepare_files_dirs
+from ptp.models.transforms import RescaleTransform, CorruptedTransform
+from ptp.training.data_preparation import prepare_files_dirs
 
 
 class Net(pl.LightningModule):

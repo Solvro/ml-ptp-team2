@@ -14,11 +14,11 @@ from monai.transforms import (
     ScaleIntensityd, NormalizeIntensityd
 )
 
-from src.ptp.evaluation.visualization import visualize_volumes, visualize_slices
-from src.ptp.models.gan_2d.discriminator import Discriminator
-from src.ptp.models.gan_2d.generator import Generator
-from src.ptp.models.transforms import CorruptedTransform, RandomNoiseTransform, SliceTransform
-from src.ptp.training.data_preparation import prepare_files_dirs
+from ptp.evaluation.visualization import visualize_slices
+from ptp.models.gan_2d.discriminator import Discriminator
+from ptp.models.gan_2d.generator import Generator
+from ptp.models.transforms import CorruptedTransform, RandomNoiseTransform, SliceTransform
+from ptp.training.data_preparation import prepare_files_dirs
 
 
 class GAN2D(pl.LightningModule):

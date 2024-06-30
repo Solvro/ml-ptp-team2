@@ -8,7 +8,7 @@ from monai.data import MetaTensor
 # Structural Similarity Loss
 from monai.transforms import MapTransform
 
-from src.ptp.models.missing_volume_gen import training_data_generator_pt
+from ptp.models.missing_volume_gen import training_data_generator_pt
 
 
 def training_data_generator_pt(seismic, axis: Literal['i_line', 'x_line', None]=None, percentile: int=25):

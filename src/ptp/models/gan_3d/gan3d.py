@@ -13,21 +13,21 @@ from monai.transforms import (
     Orientationd,
     SignalFillEmptyd,
     RandSpatialCropd,
-    ScaleIntensityd, NormalizeIntensityd
+    ScaleIntensityd
 )
-
-from src.ptp.evaluation.visualization import visualize_volumes
-from src.ptp.models.gan_3d.discriminator import Discriminator
-from src.ptp.models.gan_3d.generator import Generator
-from src.ptp.models.transforms import CorruptedTransform, RandomNoiseTransform, RescaleTransform
-from src.ptp.training.data_preparation import prepare_files_dirs
 from torch.utils.tensorboard import SummaryWriter
+
+from ptp.evaluation.visualization import visualize_volumes
+from ptp.models.gan_3d.discriminator import Discriminator
+from ptp.models.gan_3d.generator import Generator
+from ptp.models.transforms import CorruptedTransform, RandomNoiseTransform, RescaleTransform
+from ptp.training.data_preparation import prepare_files_dirs
 
 
 class GAN3D(pl.LightningModule):
 
     # recon_loss : reconstruction loss, either mse or tce
-    def __init__(self, target_data_dir, percentile=0.05, n_critic=4, recon_loss=F.mse_loss,
+    def __init__(self, target_data_dir, model_dir, percentile=0.05, n_critic=4, recon_loss=F.mse_loss,
                  weight_clip=0.01, batch_size=1):
         super().__init__()
         self.G = Generator()
@@ -39,7 +39,6 @@ class GAN3D(pl.LightningModule):
         self.percentile = percentile
         self.batch_size = batch_size
         self.transforms = [LoadImaged(keys=['target']),
-                           # NormalizeIntensityd(keys=['target']),
                            RescaleTransform(keys=['target']),
                            EnsureChannelFirstd(keys=['target']),
                            Orientationd(keys=["target"], axcodes="RAS"),
@@ -53,7 +52,7 @@ class GAN3D(pl.LightningModule):
         # Activate manual optimization
         self.automatic_optimization = False
         self.compt_step = 0
-        self.writer = SummaryWriter()
+        self.writer = SummaryWriter(log_dir=model_dir)
         self.validation_step_outputs = []
 
     def forward(self, x):
@@ -105,9 +104,11 @@ class GAN3D(pl.LightningModule):
             self.manual_backward(errG)
             g_opt.step()
 
-            self.log_dict({'g_loss': errG}, prog_bar=True, on_epoch=True)
+            self.log_dict({'g_loss': errG, 'errG_pred': errG_pred, 'errG_recon': errG_recon},
+                          prog_bar=True, on_epoch=True)
 
-        self.log_dict({'d_loss': errD, 'n_step': self.compt_step}, prog_bar=True, on_epoch=True)
+        self.log_dict({'d_loss': errD, 'errD_real': errD_real, 'errD_fake': errD_fake},
+                      prog_bar=True, on_epoch=True)
         self.compt_step += 1
 
     def validation_step(self, batch, batch_idx):
@@ -135,29 +136,35 @@ class GAN3D(pl.LightningModule):
         # discriminator should predict those as real
         errG_pred = -torch.mean(d_z)
         # reconstruction loss
-        errG_mse = self.recon_loss(g_X, targets)
+        errG_recon = self.recon_loss(g_X, targets)
 
-        errG = (errG_pred + errG_mse) / 2
+        errG = errG_pred + errG_recon
 
-        self.log_dict({'val_g_loss': errG, 'val_d_loss': errD, 'val_loss': (errG + errD)}, prog_bar=True, on_epoch=True)
+        '''
+        self.log_dict({'val_g_loss': errG,
+                       'val_d_loss': errD,
+                       'val_loss': (errG + errD),
+                       'errG_recon': errG_recon}, prog_bar=True, on_epoch=True)
+        '''
         self.validation_step_outputs.append(g_X)
 
     def on_validation_epoch_end(self) -> None:
         val_outputs = torch.stack(self.validation_step_outputs)
         print(val_outputs.shape)
-        grid_x = torchvision.utils.make_grid(val_outputs[:, 0, :, 100, :, :])
-        self.writer.add_image('images - x', grid_x, 0)
-        grid_y = torchvision.utils.make_grid(val_outputs[:, 0, :, :, 100, :])
-        self.writer.add_image('images - y', grid_y, 0)
-        grid_z = torchvision.utils.make_grid(val_outputs[:, 0, :, :, :, 100])
-        self.writer.add_image('images - z', grid_z, 0)
+        x, y, z = 100, 100, 100
+        grid_x = torchvision.utils.make_grid(val_outputs[:, 0, :, x, :, :])
+        self.writer.add_image('images - x', grid_x, self.global_step)
+        grid_y = torchvision.utils.make_grid(val_outputs[:, 0, :, :, y, :])
+        self.writer.add_image('images - y', grid_y, self.global_step)
+        grid_z = torchvision.utils.make_grid(val_outputs[:, 0, :, :, :, z])
+        self.writer.add_image('images - z', grid_z, self.global_step)
         self.writer.close()
         self.validation_step_outputs.clear()
 
     def configure_optimizers(self):
         # Discriminator and generator need to be trained separately so they have different optimizers
-        d_opt = torch.optim.RMSprop(self.D.parameters(), lr=0.0004)
-        g_opt = torch.optim.RMSprop(self.G.parameters(), lr=0.0001)
+        d_opt = torch.optim.Adam(self.D.parameters(), lr=0.0004, betas=(0.5, 0.999))
+        g_opt = torch.optim.Adam(self.G.parameters(), lr=0.0001, betas=(0.5, 0.999))
         return g_opt, d_opt
 
     def prepare_data(self):

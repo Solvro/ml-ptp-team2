@@ -4,7 +4,7 @@ import torch
 from monai.data import MetaTensor
 from monai.transforms import MapTransform
 
-from src.ptp.models.missing_volume_gen import training_data_generator_pt
+from ptp.models.missing_volume_gen import training_data_generator_pt
 
 
 def rescale_volume(seismic):
