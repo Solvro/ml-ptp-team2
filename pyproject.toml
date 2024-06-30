@@ -16,6 +16,8 @@ dependencies = [
     "torchvision ~= 0.16",
     "scipy ~= 1.10",
     "numpy ~= 1.24",
+    "wandb",
+    "scikit-image"
 ]
 [project.urls]
 "Source" = "https://github.com/SOLVRO-ML/PTP1"
