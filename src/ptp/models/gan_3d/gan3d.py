@@ -28,7 +28,7 @@ class GAN3D(pl.LightningModule):
 
     # recon_loss : reconstruction loss, either mse or tce
     def __init__(self, target_data_dir, model_dir, percentile=0.05, n_critic=4, recon_loss=F.mse_loss,
-                 weight_clip=0.01, batch_size=1):
+                 weight_clip=0.01, batch_size=1, d_lr=0.0001, g_lr=0.0001):
         super().__init__()
         self.G = Generator()
         self.D = Discriminator(1)
@@ -38,6 +38,8 @@ class GAN3D(pl.LightningModule):
         self.weight_clip = weight_clip
         self.percentile = percentile
         self.batch_size = batch_size
+        self.d_lr = d_lr
+        self.g_lr = g_lr
         self.transforms = [LoadImaged(keys=['target']),
                            RescaleTransform(keys=['target']),
                            EnsureChannelFirstd(keys=['target']),
@@ -150,7 +152,6 @@ class GAN3D(pl.LightningModule):
 
     def on_validation_epoch_end(self) -> None:
         val_outputs = torch.stack(self.validation_step_outputs)
-        print(val_outputs.shape)
         x, y, z = 100, 100, 100
         grid_x = torchvision.utils.make_grid(val_outputs[:, 0, :, x, :, :])
         self.writer.add_image('images - x', grid_x, self.global_step)
@@ -163,8 +164,8 @@ class GAN3D(pl.LightningModule):
 
     def configure_optimizers(self):
         # Discriminator and generator need to be trained separately so they have different optimizers
-        d_opt = torch.optim.Adam(self.D.parameters(), lr=0.0004, betas=(0.5, 0.999))
-        g_opt = torch.optim.Adam(self.G.parameters(), lr=0.0001, betas=(0.5, 0.999))
+        d_opt = torch.optim.Adam(self.D.parameters(), lr=self.d_lr, betas=(0.5, 0.999))
+        g_opt = torch.optim.Adam(self.G.parameters(), lr=self.g_lr, betas=(0.5, 0.999))
         return g_opt, d_opt
 
     def prepare_data(self):
