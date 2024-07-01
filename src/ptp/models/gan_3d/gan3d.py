@@ -140,12 +140,12 @@ class GAN3D(pl.LightningModule):
 
         errG = errG_pred + errG_recon
 
-        '''
+    
         self.log_dict({'val_g_loss': errG,
                        'val_d_loss': errD,
                        'val_loss': (errG + errD),
                        'errG_recon': errG_recon}, prog_bar=True, on_epoch=True)
-        '''
+    
         self.validation_step_outputs.append(g_X)
 
     def on_validation_epoch_end(self) -> None:
