@@ -18,7 +18,7 @@ from monai.transforms import (
 from torch.utils.tensorboard import SummaryWriter
 
 from ptp.evaluation.visualization import visualize_volumes
-from ptp.models.gan_3d.discriminator import Discriminator
+from ptp.models.gan_3d.discriminator import Discriminator, gradient_penalty
 from ptp.models.gan_3d.generator import Generator
 from ptp.models.transforms import CorruptedTransform, RandomNoiseTransform, RescaleTransform
 from ptp.training.data_preparation import prepare_files_dirs
@@ -28,18 +28,18 @@ class GAN3D(pl.LightningModule):
 
     # recon_loss : reconstruction loss, either mse or tce
     def __init__(self, target_data_dir, model_dir, percentile=0.05, n_critic=4, recon_loss=F.mse_loss,
-                 weight_clip=0.01, batch_size=1, d_lr=0.0001, g_lr=0.0001):
+                 lambda_penalty=10, batch_size=1, d_lr=0.0001, g_lr=0.0001):
         super().__init__()
         self.G = Generator()
         self.D = Discriminator(1)
         self.n_critic = n_critic
         self.target_data_dir = target_data_dir
         self.recon_loss = recon_loss
-        self.weight_clip = weight_clip
         self.percentile = percentile
         self.batch_size = batch_size
         self.d_lr = d_lr
         self.g_lr = g_lr
+        self.lambda_penalty = lambda_penalty
         self.transforms = [LoadImaged(keys=['target']),
                            RescaleTransform(keys=['target']),
                            EnsureChannelFirstd(keys=['target']),
@@ -77,16 +77,14 @@ class GAN3D(pl.LightningModule):
 
         errD_fake = torch.mean(d_z)  # error of predicting generator's output as fake
 
-        errD = errD_fake - errD_real  # same as -(errD_real - errD_fake)
+        gp = gradient_penalty(self.D, X_corrupted, g_X, device=self.device)
+
+        errD = errD_fake - errD_real + self.lambda_penalty * gp  # same as -(errD_real - errD_fake)
 
         # We optimize only discriminator's parameters
         d_opt.zero_grad()
         self.manual_backward(errD)
         d_opt.step()
-
-        # Parameter Weight Clipping for K-Lipshitz constraint
-        for p in self.D.parameters():
-            p.data.clamp_(-self.weight_clip, self.weight_clip)
 
         #############
         # Generator #
@@ -109,7 +107,7 @@ class GAN3D(pl.LightningModule):
             self.log_dict({'g_loss': errG, 'errG_pred': errG_pred, 'errG_recon': errG_recon},
                           prog_bar=True, on_epoch=True)
 
-        self.log_dict({'d_loss': errD, 'errD_real': errD_real, 'errD_fake': errD_fake},
+        self.log_dict({'d_loss': errD, 'errD_real': errD_real, 'errD_fake': errD_fake, 'gp': gp},
                       prog_bar=True, on_epoch=True)
         self.compt_step += 1
 
@@ -164,8 +162,8 @@ class GAN3D(pl.LightningModule):
 
     def configure_optimizers(self):
         # Discriminator and generator need to be trained separately so they have different optimizers
-        d_opt = torch.optim.Adam(self.D.parameters(), lr=self.d_lr, betas=(0.5, 0.999))
-        g_opt = torch.optim.Adam(self.G.parameters(), lr=self.g_lr, betas=(0.5, 0.999))
+        d_opt = torch.optim.Adam(self.D.parameters(), lr=self.d_lr, betas=(0.0, 0.9))
+        g_opt = torch.optim.Adam(self.G.parameters(), lr=self.g_lr, betas=(0.0, 0.9))
         return g_opt, d_opt
 
     def prepare_data(self):
