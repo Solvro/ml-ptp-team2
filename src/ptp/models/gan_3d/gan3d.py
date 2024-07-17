@@ -77,7 +77,7 @@ class GAN3D(pl.LightningModule):
 
         errD_fake = torch.mean(d_z)  # error of predicting generator's output as fake
 
-        gp = gradient_penalty(self.D, X_corrupted, g_X, device=self.device)
+        gp = gradient_penalty(self.D, X_original, g_X, device=self.device)
 
         errD = errD_fake - errD_real + self.lambda_penalty * gp  # same as -(errD_real - errD_fake)
 
@@ -127,7 +127,9 @@ class GAN3D(pl.LightningModule):
         d_z = self.D(g_X.detach())
         errD_fake = torch.mean(d_z)
 
-        errD = errD_fake - errD_real
+        gp = gradient_penalty(self.D, targets, g_X, device=self.device)
+
+        errD = errD_fake - errD_real + self.lambda_penalty * gp
 
         #############
         # Generator #

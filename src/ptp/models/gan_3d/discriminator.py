@@ -11,6 +11,7 @@ def gradient_penalty(critic, real, fake, device="cpu"):
     interpolated_images = real * epsilon + fake * (1 - epsilon)
 
     mixed_scores = critic(interpolated_images)
+
     gradient = torch.autograd.grad(
         inputs=interpolated_images,
         outputs=mixed_scores,
@@ -20,7 +21,10 @@ def gradient_penalty(critic, real, fake, device="cpu"):
     )[0]
 
     gradient = gradient.view(batch_size, -1)
-    gradient_norm = gradient.norm(2, dim=1)
+    # gradient_norm = gradient.norm(2, dim=1)
+    # Compute norm manually
+    gradient_norm = torch.sqrt(torch.sum(gradient ** 2, dim=1) + 1e-12)
+
     gradient_penalty = torch.mean((gradient_norm - 1) ** 2)
     return gradient_penalty
 
