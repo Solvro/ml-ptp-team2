@@ -10,11 +10,14 @@ requires-python = ">= 3.8, < 3.12"
 dependencies = [
     "torch ~= 2.1",
     "pytorch-lightning ~= 2.1",
+    "lightning ~= 2.3",
     "monai[nibabel, skimage, pillow, tensorboard, torchvision, itk, tqdm] ~= 1.3",
     "torchmetrics ~= 1.2",
     "torchvision ~= 0.16",
     "scipy ~= 1.10",
     "numpy ~= 1.24",
+    "wandb",
+    "scikit-image"
 ]
 [project.urls]
 "Source" = "https://github.com/SOLVRO-ML/PTP1"
@@ -69,3 +72,6 @@ order-by-type = true
 lines-between-types = 1
 combine-as-imports = true
 # known_first_party = "common"
+
+[tool.setuptools.dynamic]
+readme = {file = ['README.md']}
